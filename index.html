@@ -1,0 +1,260 @@
+
+<!DOCTYPE html>
+<html lang="id">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>MCGG World Ranking</title>
+<style>
+*{box-sizing:border-box}
+body{margin:0;background:#0b1020;color:#eef3ff;font-family:Arial,sans-serif}
+header{padding:25px;background:#121d35;border-bottom:1px solid #30415e}
+header h1{margin:0;color:#79aaff}
+header p,.muted{color:#9eacc5}
+main{max-width:1100px;margin:auto;padding:20px}
+.stats{display:grid;grid-template-columns:repeat(3,1fr);gap:12px}
+.card{background:#141f35;border:1px solid #2b3b58;border-radius:12px;padding:18px;margin-bottom:16px}
+.stat{font-size:28px;font-weight:bold;margin-top:8px}
+h2{margin-top:0;font-size:19px}
+input,select{width:100%;padding:11px;background:#0b1427;border:1px solid #344662;color:white;border-radius:7px;margin:6px 0 12px}
+button{padding:11px 15px;border:0;border-radius:7px;background:#3979ed;color:white;font-weight:bold;cursor:pointer}
+button:hover{background:#5590ff}
+button.secondary{background:#34445f}
+table{width:100%;border-collapse:collapse}
+th,td{text-align:left;padding:12px 8px;border-bottom:1px solid #293750}
+th{color:#9eacc5;font-size:12px}
+.rank{color:#f5ca58;font-weight:bold}
+.scroll{overflow-x:auto}
+.formgrid{display:grid;grid-template-columns:1fr 1fr;gap:16px}
+.result{padding:10px 0;border-bottom:1px solid #293750}
+.small{font-size:12px;color:#9eacc5}
+@media(max-width:650px){.stats{grid-template-columns:1fr 1fr}.formgrid{grid-template-columns:1fr}main{padding:12px}header{padding:20px}}
+</style>
+</head>
+<body>
+<header>
+  <h1>♟ MCGG WORLD RANKING</h1>
+  <p>Global Player Leaderboard · Community Edition</p>
+</header>
+
+<main>
+  <div class="card">
+    <strong>Data tersimpan otomatis di browser ini.</strong>
+    <p class="muted small">Data belum tersinkron antarperangkat. Gunakan Export Backup untuk menyimpan salinan.</p>
+  </div>
+
+  <section class="stats">
+    <div class="card">Total Players<div class="stat" id="totalPlayers">0</div></div>
+    <div class="card">Total Matches<div class="stat" id="totalMatches">0</div></div>
+    <div class="card">World No. 1<div class="stat" id="leader">—</div></div>
+  </section>
+
+  <section class="card">
+    <h2>🌍 Global Rankings</h2>
+    <div class="scroll">
+      <table>
+        <thead><tr><th>Rank</th><th>Player</th><th>Country</th><th>Points</th><th>Wins</th></tr></thead>
+        <tbody id="ranking"></tbody>
+      </table>
+    </div>
+  </section>
+
+  <div class="formgrid">
+    <section class="card">
+      <h2>➕ Add Player</h2>
+      <form id="addForm">
+        <label>Nickname</label>
+        <input id="nickname" maxlength="32" required placeholder="Nama pemain">
+        <label>Country</label>
+        <input id="country" required value="Indonesia">
+        <button type="submit">Add Player</button>
+      </form>
+    </section>
+
+    <section class="card">
+      <h2>🏆 Record Match</h2>
+      <form id="matchForm">
+        <label>Nama turnamen</label>
+        <input id="tournament" required placeholder="Contoh: MCGG Cup 1">
+        <label>Bobot turnamen</label>
+        <select id="weight">
+          <option value="1">Community Cup (1x)</option>
+          <option value="2">Regional Cup (2x)</option>
+          <option value="3">National Championship (3x)</option>
+          <option value="5">World Championship (5x)</option>
+        </select>
+        <p class="muted small">Pilih 8 pemain dan atur posisi akhir mereka.</p>
+        <div id="positions"></div>
+        <button type="submit" id="saveMatch">Save Match & Update Ranking</button>
+      </form>
+    </section>
+  </div>
+
+  <section class="card">
+    <h2>🕘 Match History</h2>
+    <div id="history"><p class="muted">Belum ada pertandingan.</p></div>
+  </section>
+
+  <section class="card">
+    <h2>💾 Backup Data</h2>
+    <p class="muted small">Export backup secara berkala agar kamu punya salinan data.</p>
+    <button onclick="exportData()">Export JSON</button>
+    <button class="secondary" onclick="document.getElementById('backupFile').click()">Import JSON</button>
+    <input id="backupFile" type="file" accept=".json" hidden>
+    <button class="secondary" onclick="resetData()">Reset All Data</button>
+  </section>
+
+  <p class="muted small">MCGG Community Ranking — bukan ranking resmi Moonton.</p>
+</main>
+
+<script>
+const KEY = "mcgg-world-ranking-v1";
+const BASE = [10,8,7,6,4,3,2,1];
+let data = load();
+
+function load(){
+  try {
+    const d = JSON.parse(localStorage.getItem(KEY));
+    if(d && Array.isArray(d.players) && Array.isArray(d.matches)) return d;
+  } catch(e){}
+  return {players:[],matches:[]};
+}
+function save(){
+  try {
+    localStorage.setItem(KEY,JSON.stringify(data));
+    render();
+  } catch(e) {
+    alert("Penyimpanan browser gagal. Export backup segera.");
+  }
+}
+function id(){
+  return crypto.randomUUID ? crypto.randomUUID() :
+    Date.now().toString(36)+Math.random().toString(36).slice(2);
+}
+function safe(s){
+  return String(s).replace(/[&<>"']/g,c=>({
+    "&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"
+  })[c]);
+}
+function ordered(){
+  return [...data.players].sort((a,b)=>
+    b.points-a.points || b.wins-a.wins ||
+    a.name.localeCompare(b.name)
+  );
+}
+function render(){
+  const players=ordered();
+  document.getElementById("totalPlayers").textContent=data.players.length;
+  document.getElementById("totalMatches").textContent=data.matches.length;
+  document.getElementById("leader").textContent=players[0]?.name||"—";
+
+  document.getElementById("ranking").innerHTML=players.map((p,i)=>`
+    <tr>
+      <td class="rank">#${i+1}</td>
+      <td><strong>${safe(p.name)}</strong></td>
+      <td>${safe(p.country)}</td>
+      <td><strong>${p.points}</strong></td>
+      <td>${p.wins}</td>
+    </tr>`).join("");
+
+  const opts=players.map(p=>
+    `<option value="${p.id}">${safe(p.name)}</option>`
+  ).join("");
+
+  document.getElementById("positions").innerHTML=
+    BASE.map((pts,i)=>`
+      <label>Position ${i+1} (${pts} base points)</label>
+      <select class="playerChoice" required>
+        <option value="">-- Pilih pemain --</option>${opts}
+      </select>`).join("");
+
+  document.getElementById("saveMatch").disabled=data.players.length<8;
+  document.getElementById("history").innerHTML=
+    [...data.matches].reverse().map(m=>`
+      <div class="result">
+        <strong>${safe(m.name)}</strong>
+        <div class="small">${new Date(m.date).toLocaleString()}</div>
+        ${m.results.map(r=>
+          `<div>${r.place}. ${safe(r.name)} — +${r.earned} points</div>`
+        ).join("")}
+      </div>`).join("") || '<p class="muted">Belum ada pertandingan.</p>';
+}
+
+document.getElementById("addForm").addEventListener("submit",e=>{
+  e.preventDefault();
+  const name=document.getElementById("nickname").value.trim();
+  const country=document.getElementById("country").value.trim();
+  if(data.players.some(p=>p.name.toLowerCase()===name.toLowerCase()))
+    return alert("Nickname sudah terdaftar.");
+
+  data.players.push({
+    id:id(),name,country,points:0,wins:0
+  });
+  e.target.reset();
+  document.getElementById("country").value="Indonesia";
+  save();
+});
+
+document.getElementById("matchForm").addEventListener("submit",e=>{
+  e.preventDefault();
+  if(data.players.length<8)return alert("Tambahkan minimal 8 pemain.");
+
+  const choices=[...document.querySelectorAll(".playerChoice")];
+  const ids=choices.map(s=>s.value);
+
+  if(ids.some(x=>!x) || new Set(ids).size!==8)
+    return alert("Pilih 8 pemain yang berbeda untuk semua posisi.");
+
+  const name=document.getElementById("tournament").value.trim();
+  const weight=Number(document.getElementById("weight").value);
+
+  if(!confirm("Konfirmasi hasil match dan tambahkan poin ranking?"))return;
+
+  const results=ids.map((pid,i)=>{
+    const p=data.players.find(x=>x.id===pid);
+    const earned=BASE[i]*weight;
+    return {playerId:pid,name:p.name,place:i+1,earned};
+  });
+
+  results.forEach(r=>{
+    const p=data.players.find(x=>x.id===r.playerId);
+    p.points+=r.earned;
+    if(r.place===1)p.wins++;
+  });
+
+  data.matches.push({
+    id:id(),name,weight,date:new Date().toISOString(),results
+  });
+  save();
+  document.getElementById("tournament").value="";
+  alert("Match tersimpan dan ranking diperbarui!");
+});
+
+function exportData(){
+  const blob=new Blob([JSON.stringify(data,null,2)],{type:"application/json"});
+  const url=URL.createObjectURL(blob);
+  const a=document.createElement("a");
+  a.href=url;a.download="mcgg-ranking-backup.json";a.click();
+  URL.revokeObjectURL(url);
+}
+
+document.getElementById("backupFile").addEventListener("change",async e=>{
+  const f=e.target.files[0];if(!f)return;
+  try{
+    const d=JSON.parse(await f.text());
+    if(!Array.isArray(d.players)||!Array.isArray(d.matches))
+      throw Error("invalid");
+    if(!confirm("Import akan mengganti seluruh data saat ini. Lanjutkan?"))return;
+    data=d;save();alert("Backup berhasil diimpor.");
+  }catch(err){alert("File backup tidak valid.");}
+  e.target.value="";
+});
+
+function resetData(){
+  if(!confirm("Hapus semua pemain, poin, dan histori? Export backup dahulu jika perlu."))return;
+  data={players:[],matches:[]};save();
+}
+render();
+</script>
+</body>
+</html>
